@@ -184,54 +184,74 @@ SearchResult findPairsParallel(const std::vector<Point>& points, int num_threads
     return global_res;
 }
 
-
 int main() {
     #ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);
     #endif
 
-    int N = 75000; // Ідеальна кількість для ~5 секунд
-    
-    // Дізнаємося скільки потоків підтримує процесор (скільки ядер)
-    unsigned int num_threads = std::thread::hardware_concurrency();
-    if(num_threads == 0) num_threads = 4; // Запобіжник
+    int N = 75000;
 
     std::cout << "--- Згенерую " << N << " точок ---\n";
     std::vector<Point> points = generatePoints(N);
+    
+    // Зберігання точок у файл для пункту 3
+    saveToFile(points, "points_data.txt");
+    std::cout << "(Дані збережено у файл points_data.txt)\n";
 
+    // ---------------------------------------------------------
+    // 1. ПОСЛІДОВНИЙ ЗАМІР
+    // ---------------------------------------------------------
     std::cout << "\n1. Запускаю ПОСЛІДОВНИЙ алгоритм... (очікуйте ~5 сек)\n";
     auto start_seq = std::chrono::high_resolution_clock::now();
+    
     SearchResult seq_res = findPairsSequential(points);
+    
     auto end_seq = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> time_seq = end_seq - start_seq; // Рахуємо час виконання
+    std::chrono::duration<double> time_seq = end_seq - start_seq;
     
     std::cout << "Відстань найближчих: " << seq_res.min_dist << "\n";
     std::cout << "Відстань найвіддаленіших: " << seq_res.max_dist << "\n";
     std::cout << ">> ЧАС ПОСЛІДОВНОГО: " << time_seq.count() << " секунд\n";
 
-
-    std::cout << "\n2. Запускаю ПАРАЛЕЛЬНИЙ алгоритм на " << num_threads << " потоках...\n";
-    auto start_par = std::chrono::high_resolution_clock::now();
-    SearchResult par_res = findPairsParallel(points, num_threads);
-    auto end_par = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> time_par = end_par - start_par; // Рахуємо час виконання
+    // ---------------------------------------------------------
+    // 2. ПАРАЛЕЛЬНИЙ ЗАМІР (БЕНЧМАРК)
+    // ---------------------------------------------------------
+	std::cout << "\n==========================================================\n";
+    std::cout << "   ПАРАЛЕЛЬНИЙ алгоритм (Залежність від к-сті потоків)\n";
+    std::cout << "==========================================================\n";
     
-    std::cout << "Відстань найближчих: " << par_res.min_dist << "\n";
-    std::cout << "Відстань найвіддаленіших: " << par_res.max_dist << "\n";
-    std::cout << ">> ЧАС ПАРАЛЕЛЬНОГО: " << time_par.count() << " секунд\n";
+    // Шапка таблиці (Вирівняна пробілами вручну, щоб обійти баг C++ з кирилицею)
+    std::cout << "    Потоки      Час (сек)    Прискорення      Перевірка\n";
+    std::cout << "----------------------------------------------------------\n";
 
+    // Масив з кількістю потоків для тестування
+    std::vector<int> test_threads = {1, 2, 3, 4, 6, 8, 12, 16};
 
-    std::cout << "\n========================================\n";
-    // Перевіряємо, чи збігаються результати (щоб довести правильність паралельного алгоритму)
-    if (std::abs(seq_res.min_dist - par_res.min_dist) < 1e-6) {
-        std::cout << "[ОК] Результати обох алгоритмів ідентичні!\n";
-    } else {
-        std::cout << "[ПОМИЛКА] Результати не збігаються!\n";
+    // Запускаємо паралельну функцію для кожної кількості потоків
+    for (int t : test_threads) {
+        auto start_par = std::chrono::high_resolution_clock::now();
+        
+        SearchResult par_res = findPairsParallel(points, t);
+        
+        auto end_par = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> time_par = end_par - start_par;
+
+        // Рахуємо прискорення (час послідовного ділимо на час паралельного)
+        double speedup = time_seq.count() / time_par.count();
+
+        // Перевіряємо правильність результату
+        std::string check = "ПОМИЛКА";
+        if (std::abs(seq_res.min_dist - par_res.min_dist) < 1e-6) {
+            check = "ОК";
+        }
+
+        // Виводимо рядок таблиці (тут setw працює ідеально, бо цифри)
+        std::cout << std::setw(10) << t 
+                  << std::setw(15) << std::fixed << std::setprecision(4) << time_par.count() 
+                  << std::setw(14) << std::fixed << std::setprecision(2) << speedup << "x"
+                  << std::setw(15) << check << "\n";
     }
-
-    double speedup = time_seq.count() / time_par.count(); // Рахуємо наскільки швидше (прискорення)
-    std::cout << "Досягнуте ПРИСКОРЕННЯ: в " << std::fixed << std::setprecision(2) << speedup << " разів!\n";
-    std::cout << "========================================\n";
+    std::cout << "==========================================================\n";
 
     return 0;
 }
