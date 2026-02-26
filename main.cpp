@@ -190,11 +190,15 @@ int main() {
     #endif
 
     int N = 75000;
+    
+    // Дізнаємося кількість потоків процесора
+    unsigned int num_threads = std::thread::hardware_concurrency();
+    if(num_threads == 0) num_threads = 8; 
 
     std::cout << "--- Згенерую " << N << " точок ---\n";
     std::vector<Point> points = generatePoints(N);
     
-    // Зберігання точок у файл для пункту 3
+    // Зберігання точок у файл для завдання 3
     saveToFile(points, "points_data.txt");
     std::cout << "(Дані збережено у файл points_data.txt)\n";
 
@@ -214,20 +218,41 @@ int main() {
     std::cout << ">> ЧАС ПОСЛІДОВНОГО: " << time_seq.count() << " секунд\n";
 
     // ---------------------------------------------------------
-    // 2. ПАРАЛЕЛЬНИЙ ЗАМІР (БЕНЧМАРК)
+    // 2. ДЕТАЛЬНИЙ ПАРАЛЕЛЬНИЙ ЗАМІР 
     // ---------------------------------------------------------
-	std::cout << "\n==========================================================\n";
-    std::cout << "   ПАРАЛЕЛЬНИЙ алгоритм (Залежність від к-сті потоків)\n";
+    std::cout << "\n2. Запускаю ПАРАЛЕЛЬНИЙ алгоритм на " << num_threads << " потоках...\n";
+    auto start_par_single = std::chrono::high_resolution_clock::now();
+    
+    SearchResult par_res_single = findPairsParallel(points, num_threads);
+    
+    auto end_par_single = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> time_par_single = end_par_single - start_par_single;
+    
+    std::cout << "Відстань найближчих: " << par_res_single.min_dist << "\n";
+    std::cout << "Відстань найвіддаленіших: " << par_res_single.max_dist << "\n";
+    std::cout << ">> ЧАС ПАРАЛЕЛЬНОГО: " << time_par_single.count() << " секунд\n";
+
+    if (std::abs(seq_res.min_dist - par_res_single.min_dist) < 1e-6) {
+        std::cout << "----------------------------------------------------------\n";
+        std::cout << "[ОК] Результати обох алгоритмів ідентичні!\n";
+        std::cout << "----------------------------------------------------------\n";
+    } else {
+        std::cout << "[ПОМИЛКА] Результати не збігаються!\n";
+    }
+
+    // ---------------------------------------------------------
+    // 3. БЕНЧМАРК (Залежність часу від к-сті потоків)
+    // ---------------------------------------------------------
+    std::cout << "\n==========================================================\n";
+    std::cout << "   БЕНЧМАРК (Залежність часу від к-сті потоків)\n";
     std::cout << "==========================================================\n";
     
-    // Шапка таблиці (Вирівняна пробілами вручну, щоб обійти баг C++ з кирилицею)
+    // Шапка таблиці (Вирівняна пробілами вручну)
     std::cout << "    Потоки      Час (сек)    Прискорення      Перевірка\n";
     std::cout << "----------------------------------------------------------\n";
 
-    // Масив з кількістю потоків для тестування
     std::vector<int> test_threads = {1, 2, 3, 4, 6, 8, 12, 16};
 
-    // Запускаємо паралельну функцію для кожної кількості потоків
     for (int t : test_threads) {
         auto start_par = std::chrono::high_resolution_clock::now();
         
@@ -236,16 +261,13 @@ int main() {
         auto end_par = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> time_par = end_par - start_par;
 
-        // Рахуємо прискорення (час послідовного ділимо на час паралельного)
         double speedup = time_seq.count() / time_par.count();
 
-        // Перевіряємо правильність результату
         std::string check = "ПОМИЛКА";
         if (std::abs(seq_res.min_dist - par_res.min_dist) < 1e-6) {
             check = "ОК";
         }
 
-        // Виводимо рядок таблиці (тут setw працює ідеально, бо цифри)
         std::cout << std::setw(10) << t 
                   << std::setw(15) << std::fixed << std::setprecision(4) << time_par.count() 
                   << std::setw(14) << std::fixed << std::setprecision(2) << speedup << "x"
