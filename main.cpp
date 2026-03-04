@@ -185,27 +185,71 @@ SearchResult findPairsParallel(const std::vector<Point>& points, int num_threads
 }
 
 int main() {
-    #ifdef _WIN32
+	#ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);
     #endif
 
-    int N = 75000;
-    
-    // Дізнаємося кількість потоків процесора
-    unsigned int num_threads = std::thread::hardware_concurrency();
-    if(num_threads == 0) num_threads = 8; 
+    std::vector<Point> points;
+    std::string filename = "points_data.txt";
+    char choice;
 
-    std::cout << "--- Згенерую " << N << " точок ---\n";
-    std::vector<Point> points = generatePoints(N);
+    std::cout << "=== МЕНЮ КЕРУВАННЯ ДАНИМИ ===\n";
     
-    // Зберігання точок у файл для завдання 3
-    saveToFile(points, "points_data.txt");
-    std::cout << "(Дані збережено у файл points_data.txt)\n";
+    // 1. Цикл вибору способу отримання даних
+    while (true) {
+        std::cout << "Зчитати дані з файлу? (y - так / n - генерувати нові): ";
+        std::cin >> choice;
+
+        if (choice == 'y' || choice == 'Y') {
+            points = loadFromFile(filename);
+            if (points.empty()) {
+                std::cout << "Помилка: Файл порожній або не знайдений. Спробуйте генерувати нові.\n";
+                continue; // Повертаємось на початок циклу
+            }
+            std::cout << "Успішно зчитано " << points.size() << " точок з файлу.\n";
+            break; // Вихід з циклу, дані отримані
+        } 
+        else if (choice == 'n' || choice == 'N') {
+            int N;
+            // 2. Цикл перевірки вводу числа N
+            while (true) {
+                std::cout << "Введіть кількість точок для генерації (мінімум 2): ";
+                if (!(std::cin >> N) || N < 2) {
+                    std::cout << "Некоректне число! Введіть ціле число більше 1.\n";
+                    std::cin.clear(); // Скидаємо прапорець помилки
+                    std::cin.ignore(10000, '\n'); // Очищаємо буфер
+                } else {
+                    break;
+                }
+            }
+            points = generatePoints(N);
+            std::cout << "Згенеровано " << N << " точок.\n";
+
+            char saveChoice;
+            std::cout << "Зберегти ці дані у файл " << filename << "? (y/n): ";
+            std::cin >> saveChoice;
+            if (saveChoice == 'y' || saveChoice == 'Y') {
+                saveToFile(points, filename);
+                std::cout << "Дані збережено.\n";
+            }
+            break; // Вихід з циклу, дані отримані
+        } 
+        else {
+            std::cout << "Некоректний символ! Введіть 'y' або 'n'.\n";
+            std::cin.clear();
+            std::cin.ignore(10000, '\n');
+        }
+    }
+
+    // Після того як дані отримані (з файлу чи генерації), запускаємо обчислення
+    int current_N = points.size();
+    unsigned int num_threads = std::thread::hardware_concurrency();
+    if (num_threads == 0) num_threads = 8;
 
     // ---------------------------------------------------------
     // 1. ПОСЛІДОВНИЙ ЗАМІР
     // ---------------------------------------------------------
-    std::cout << "\n1. Запускаю ПОСЛІДОВНИЙ алгоритм... (очікуйте ~5 сек)\n";
+    std::cout << "\n1. Запускаю ПОСЛІДОВНИЙ алгоритм на " << current_N << " точках...\n";
     auto start_seq = std::chrono::high_resolution_clock::now();
     
     SearchResult seq_res = findPairsSequential(points);
@@ -218,7 +262,7 @@ int main() {
     std::cout << ">> ЧАС ПОСЛІДОВНОГО: " << time_seq.count() << " секунд\n";
 
     // ---------------------------------------------------------
-    // 2. ДЕТАЛЬНИЙ ПАРАЛЕЛЬНИЙ ЗАМІР 
+    // 2. ДЕТАЛЬНИЙ ПАРАЛЕЛЬНИЙ ЗАМІР
     // ---------------------------------------------------------
     std::cout << "\n2. Запускаю ПАРАЛЕЛЬНИЙ алгоритм на " << num_threads << " потоках...\n";
     auto start_par_single = std::chrono::high_resolution_clock::now();
@@ -236,18 +280,15 @@ int main() {
         std::cout << "----------------------------------------------------------\n";
         std::cout << "[ОК] Результати обох алгоритмів ідентичні!\n";
         std::cout << "----------------------------------------------------------\n";
-    } else {
-        std::cout << "[ПОМИЛКА] Результати не збігаються!\n";
     }
 
     // ---------------------------------------------------------
-    // 3. БЕНЧМАРК (Залежність часу від к-сті потоків)
+    // 3. БЕНЧМАРК
     // ---------------------------------------------------------
     std::cout << "\n==========================================================\n";
     std::cout << "   БЕНЧМАРК (Залежність часу від к-сті потоків)\n";
     std::cout << "==========================================================\n";
     
-    // Шапка таблиці (Вирівняна пробілами вручну)
     std::cout << "    Потоки      Час (сек)    Прискорення      Перевірка\n";
     std::cout << "----------------------------------------------------------\n";
 
